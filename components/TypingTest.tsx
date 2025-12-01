@@ -15,13 +15,13 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
     const [timeLeft, setTimeLeft] = useState(TEST_DURATION);
     const [isActive, setIsActive] = useState(false);
     const [wpm, setWpm] = useState(0);
-    const [accuracy, setAccuracy] = useState(100);
+    const [accuracy, setAccuracy] = useState(0);
     const [history, setHistory] = useState<{ time: number; wpm: number }[]>([]);
     
     const inputRef = useRef<HTMLInputElement>(null);
     const timerRef = useRef<number | null>(null);
     const startTimeRef = useRef<number | null>(null);
-    const userInputRef = useRef<string>(''); // Ref to track input synchronously
+    const userInputRef = useRef<string>('');
 
     // Initialize test
     const startTest = useCallback(() => {
@@ -34,10 +34,10 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
         setTimeLeft(TEST_DURATION);
         setIsActive(false);
         setWpm(0);
-        setAccuracy(100);
+        setAccuracy(0);
         setHistory([]);
         
-        // Focus input after a small delay to ensure render
+        // Focus input after a small delay
         setTimeout(() => inputRef.current?.focus(), 100);
     }, []);
 
@@ -54,20 +54,18 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
     };
 
     const calculateStats = (input: string, startTime: number | null, currentTime: number) => {
-        // If not started, return default
         if (!startTime || input.length === 0) {
-            return { wpm: 0, accuracy: 100, correctChars: 0, incorrectChars: 0 };
+            return { wpm: 0, accuracy: 0, correctChars: 0, incorrectChars: 0 };
         }
 
         let durationSeconds = (currentTime - startTime) / 1000;
-        // Clamp min duration to prevent infinity/huge WPM at start
-        if (durationSeconds < 1) durationSeconds = 1;
-        const minutes = durationSeconds / 60;
+        // Enforce a minimum sensible duration to prevent division by near-zero (causing infinite WPM)
+        if (durationSeconds < 2) durationSeconds = 2; 
 
+        const minutes = durationSeconds / 60;
         let correctChars = 0;
         let incorrectChars = 0;
 
-        // Strict index-based comparison
         for (let i = 0; i < input.length; i++) {
             if (i < targetText.length) {
                 if (input[i] === targetText[i]) {
@@ -76,19 +74,18 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
                     incorrectChars++;
                 }
             } else {
-                // Extra characters are errors
                 incorrectChars++;
             }
         }
 
-        // Net WPM Formula: ((TotalChars - UncorrectedErrors) / 5) / TimeInMinutes
-        // We use Math.max(0, ...) to ensure no negative WPM
+        // Net WPM: ((TotalChars - UncorrectedErrors) / 5) / TimeInMinutes
         const netWords = Math.max(0, (input.length - incorrectChars) / 5);
         const currentWpm = Math.round(netWords / minutes);
 
+        // Accuracy is based on total characters typed
         const currentAccuracy = input.length > 0 
             ? Math.round((correctChars / input.length) * 100) 
-            : 100;
+            : 0;
 
         return { wpm: currentWpm, accuracy: currentAccuracy, correctChars, incorrectChars };
     };
@@ -99,12 +96,11 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
         
         const finalInput = userInputRef.current;
         const now = Date.now();
-        const start = startTimeRef.current || now; // Fallback if somehow null
+        // Fallback to now minus duration if start time is missing (edge case safety)
+        const start = startTimeRef.current || (now - (TEST_DURATION * 1000)); 
         
-        // Calculate final stats
         const stats = calculateStats(finalInput, start, now);
         
-        // Calculate precise elapsed time for record
         let elapsedTime = (now - start) / 1000;
         if (elapsedTime < 1) elapsedTime = 1;
 
@@ -118,7 +114,7 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
             history: [...history, { time: TEST_DURATION - timeLeft, wpm: stats.wpm }],
             date: new Date().toISOString()
         });
-    }, [targetText, history, onComplete, timeLeft]); // removed calculateStats dependency as it's internal logic now
+    }, [targetText, history, onComplete, timeLeft]);
 
     // Timer logic
     useEffect(() => {
@@ -135,14 +131,13 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
         return () => stopTimer();
     }, [isActive]);
 
-    // Trigger finish when time hits 0
     useEffect(() => {
         if (isActive && timeLeft === 0) {
             finishTest();
         }
     }, [timeLeft, isActive, finishTest]);
 
-    // Update Live Stats periodically
+    // Live Stats
     useEffect(() => {
         if (!isActive || !startTime) return;
 
@@ -155,7 +150,6 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
 
              setHistory(prev => {
                 const timePoint = Math.round((now - startTimeRef.current!) / 1000);
-                // Avoid duplicate time points
                 if (prev.length > 0 && prev[prev.length - 1].time === timePoint) return prev;
                 return [...prev, { time: timePoint, wpm: stats.wpm }];
              });
@@ -188,9 +182,8 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
         startTest();
     };
 
-    const handlePaste = (e: React.ClipboardEvent) => {
+    const preventPasteOrDrop = (e: React.SyntheticEvent) => {
         e.preventDefault();
-        alert("Pasting is not allowed! Please type the text.");
     };
 
     const renderText = () => {
@@ -251,7 +244,6 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
                     <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Accuracy</p>
                     <p className="text-slate-900 dark:text-white text-2xl font-bold">{accuracy}%</p>
                 </div>
-                {/* Restart Button */}
                 <Button 
                     variant="secondary" 
                     onClick={handleRestart}
@@ -267,12 +259,12 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
                 className="bg-white dark:bg-[#182f34] rounded-xl p-8 text-2xl leading-relaxed tracking-wide font-mono shadow-md border border-slate-200 dark:border-[#315f68] relative min-h-[300px] cursor-text flex flex-wrap content-start"
                 onClick={() => inputRef.current?.focus()}
             >
-                {/* Invisible Input covering the area */}
                 <input
                     ref={inputRef}
                     value={userInput}
                     onChange={handleInputChange}
-                    onPaste={handlePaste}
+                    onPaste={preventPasteOrDrop}
+                    onDrop={preventPasteOrDrop}
                     autoFocus
                     spellCheck={false}
                     autoComplete="off"
@@ -282,21 +274,15 @@ export const TypingTest: React.FC<TypingTestProps> = ({ onComplete }) => {
                     disabled={timeLeft === 0 && isActive}
                 />
                 
-                {/* Rendered Text Layer */}
                 <div className="relative z-10 pointer-events-none break-words whitespace-pre-wrap w-full select-none">
                     {renderText()}
                 </div>
                 
-                {/* Focus Overlay hint if not active */}
                 {!isActive && userInput.length === 0 && (
                     <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
                         <span className="text-slate-400 dark:text-slate-500 text-lg opacity-50 animate-pulse">Click or Start Typing...</span>
                     </div>
                 )}
-            </div>
-
-            <div className="text-center text-slate-500 text-sm">
-                <p>Press <kbd className="px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-xs font-bold">Tab</kbd> to restart test quickly.</p>
             </div>
         </div>
     );

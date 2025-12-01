@@ -12,11 +12,15 @@ export default function App() {
   const [lastResults, setLastResults] = useState<TestStats | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
-  // Load user from local storage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('typeMaster_currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    try {
+        const storedUser = localStorage.getItem('typeMaster_currentUser');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+    } catch (e) {
+        console.error("Failed to load user session", e);
+        localStorage.removeItem('typeMaster_currentUser');
     }
   }, []);
 
@@ -27,7 +31,6 @@ export default function App() {
   const handleTestComplete = (stats: TestStats) => {
     setLastResults(stats);
     
-    // Save to user history if logged in
     if (user) {
         const updatedUser = {
             ...user,
@@ -36,15 +39,18 @@ export default function App() {
         setUser(updatedUser);
         localStorage.setItem('typeMaster_currentUser', JSON.stringify(updatedUser));
         
-        // Update user in the "database" (mock)
-        const allUsersStr = localStorage.getItem('typeMaster_users');
-        if (allUsersStr) {
-            const allUsers: User[] = JSON.parse(allUsersStr);
-            const index = allUsers.findIndex(u => u.email === updatedUser.email);
-            if (index !== -1) {
-                allUsers[index] = updatedUser;
-                localStorage.setItem('typeMaster_users', JSON.stringify(allUsers));
+        try {
+            const allUsersStr = localStorage.getItem('typeMaster_users');
+            if (allUsersStr) {
+                const allUsers: User[] = JSON.parse(allUsersStr);
+                const index = allUsers.findIndex(u => u.email === updatedUser.email);
+                if (index !== -1) {
+                    allUsers[index] = updatedUser;
+                    localStorage.setItem('typeMaster_users', JSON.stringify(allUsers));
+                }
             }
+        } catch(e) {
+            console.error("Failed to update user database", e);
         }
     }
 
